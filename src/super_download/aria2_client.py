@@ -42,29 +42,36 @@ class Aria2Client:
         self._api: Optional["aria2p.API"] = None
 
     # ------------------------------------------------------------------
-    def add_uri(self, url: str, options: Optional[dict] = None, download_dir: Optional[str] = None) -> str:
+    def add_uri(self, url: str, options: Optional[dict] = None, download_dir: Optional[str] = None) -> tuple[str, str]:
+        """Adiciona URI para download.
+
+        Returns:
+            Tupla (gid, filename) onde filename é o nome real que será usado (incluindo renomeações).
+        """
         api = self._get_api()
+        filename = self.guess_filename(url)
+
         if api is None:
             gid = _mock_gid()
             LOGGER.warning(
                 "aria2p is not available; using mock download gid=%s for %s", gid, url
             )
-            return gid
+            return gid, filename
 
         # Preparar opções com nome de arquivo único se necessário
         opts = options or {}
         if download_dir:
             opts["dir"] = download_dir
             # Gerar nome único se arquivo já existir
-            filename = self.guess_filename(url)
             unique_filename = self._get_unique_filename(download_dir, filename)
             if unique_filename != filename:
                 opts["out"] = unique_filename
+                filename = unique_filename  # Usar o nome único
                 LOGGER.info("File exists, using unique name: %s", unique_filename)
 
         download = api.add_uris([url], options=opts)
         LOGGER.info("Queued download %s via aria2", download.gid)
-        return download.gid
+        return download.gid, filename
 
     def tell_status(self, gid: str) -> Aria2DownloadStatus:
         api = self._get_api()

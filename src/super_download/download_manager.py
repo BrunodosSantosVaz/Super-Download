@@ -38,11 +38,11 @@ class DownloadManager:
     def enqueue_urls(self, urls: Iterable[str]) -> None:
         download_dir = self._persistence.config.get("default_path")
         for url in urls:
-            gid = self._client.add_uri(url, download_dir=download_dir)
+            gid, filename = self._client.add_uri(url, download_dir=download_dir)
             record = DownloadRecord(
                 gid=gid,
                 url=url,
-                filename=self._client.guess_filename(url),
+                filename=filename,  # Usar o filename real retornado (já com renomeação se necessário)
                 status="queued",
             )
             LOGGER.info("Enqueued download %s (%s)", gid, url)
