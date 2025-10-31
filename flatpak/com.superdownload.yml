@@ -1,0 +1,20 @@
+app-id: com.superdownload
+runtime: org.gnome.Platform
+runtime-version: "46"
+sdk: org.gnome.Sdk
+command: super-download
+
+finish-args:
+  - --socket=session-bus
+  - --socket=wayland
+  - --share=network
+  - --filesystem=home
+
+modules:
+  - name: super-download
+    buildsystem: simple
+    build-commands:
+      - pip3 install --no-deps --prefix=/app .
+    sources:
+      - type: dir
+        path: ..

@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=65", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "super-download"
+version = "0.1.0"
+description = "Gerenciador centralizado de downloads para Linux usando GTK4 e aria2."
+authors = [{ name = "Equipe Super Download" }]
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+dependencies = [
+    "PyGObject>=3.46",
+    "aria2p>=0.11.4",
+    "pyxdg>=0.28",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black>=24.1",
+    "ruff>=0.3",
+    "pytest>=7.4",
+]
+
+[project.scripts]
+super-download = "super_download.main:main"
+super-download-cli = "super_download.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.black]
+target-version = ["py311"]
+line-length = 88
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+select = ["E", "F", "I", "N", "ANN"]
