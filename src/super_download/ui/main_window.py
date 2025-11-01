@@ -9,7 +9,7 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
-from gi.repository import Adw, Gio, GLib, Gtk, Pango
+from gi.repository import Adw, Gio, GLib, Gtk, Pango, Gdk
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..app import SuperDownloadApplication
@@ -18,6 +18,46 @@ else:
     SuperDownloadApplication = "SuperDownloadApplication"
     DownloadManager = "DownloadManager"
     DownloadRecord = "DownloadRecord"
+
+
+_STYLE_PROVIDER: Gtk.CssProvider | None = None
+
+
+def _ensure_styles_loaded() -> None:
+    """Register lightweight CSS tweaks shared across window widgets."""
+    global _STYLE_PROVIDER
+    if _STYLE_PROVIDER is not None:
+        return
+
+    css = """
+    .super-download-search {
+        min-height: 44px;
+        border-radius: 12px;
+        padding-left: 12px;
+        padding-right: 12px;
+    }
+
+    .super-download-row {
+        padding: 12px;
+        border-radius: 14px;
+    }
+
+    .super-download-empty {
+        font-size: 1.05em;
+    }
+    """
+
+    provider = Gtk.CssProvider()
+    provider.load_from_data(css.encode("utf-8"))
+
+    display = Gdk.Display.get_default()
+    if display is not None:
+        Gtk.StyleContext.add_provider_for_display(
+            display,
+            provider,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
+        )
+    _STYLE_PROVIDER = provider
 
 
 class MainWindow(Adw.ApplicationWindow):
@@ -29,47 +69,14 @@ class MainWindow(Adw.ApplicationWindow):
         self.set_default_size(960, 600)
         self.set_icon_name("com.superdownload")
 
+        _ensure_styles_loaded()
         self._download_rows: dict[str, Gtk.ListBoxRow] = {}
+        self._new_download_dialog: Adw.MessageDialog | None = None
 
         # Conectar handler para interceptar o fechamento da janela
         self.connect("close-request", self._on_close_request)
 
-        self._toolbar_view = Adw.ToolbarView()
-        self.set_content(self._toolbar_view)
-
-        self._header_bar = Adw.HeaderBar()
-        self._toolbar_view.add_top_bar(self._header_bar)
-
-        self._search_entry = Gtk.SearchEntry()
-        self._search_entry.set_placeholder_text("Adicionar download por URL...")
-        self._search_entry.connect("activate", self._on_add_url)
-
-        self._header_bar.pack_start(self._search_entry)
-
-        # ScrolledWindow que ocupa todo o espaço disponível
-        scroller = Gtk.ScrolledWindow()
-        scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        scroller.set_vexpand(True)
-        scroller.set_hexpand(True)
-
-        self._list_box = Gtk.ListBox()
-        self._list_box.set_selection_mode(Gtk.SelectionMode.NONE)
-        scroller.set_child(self._list_box)
-
-        self._info_label = Gtk.Label(label="Nenhum download no momento.")
-        self._info_label.set_margin_top(24)
-        self._info_label.get_style_context().add_class("dim-label")
-        self._info_label.set_xalign(0.5)
-        self._info_label.set_vexpand(True)
-        self._info_label.set_valign(Gtk.Align.CENTER)
-
-        # Stack para alternar entre lista e mensagem vazia
-        self._stack = Gtk.Stack()
-        self._stack.add_named(scroller, "list")
-        self._stack.add_named(self._info_label, "empty")
-        self._stack.set_visible_child_name("empty")
-
-        self._toolbar_view.set_content(self._stack)
+        self._build_ui()
 
         # Inscreve-se para atualizações automáticas da fila
         app.download_manager.subscribe(self._on_queue_change)
@@ -78,6 +85,90 @@ class MainWindow(Adw.ApplicationWindow):
     @classmethod
     def new(cls, app: SuperDownloadApplication) -> "MainWindow":
         return cls(app)
+
+    def _build_ui(self) -> None:
+        """Construct window chrome aligned with Super Web App visuals."""
+        self._toolbar_view = Adw.ToolbarView()
+        self.set_content(self._toolbar_view)
+
+        self._header_bar = Adw.HeaderBar()
+        self._toolbar_view.add_top_bar(self._header_bar)
+
+        title_label = Gtk.Label(label="Super Download")
+        title_label.add_css_class("title-4")
+        title_label.set_hexpand(True)
+        title_label.set_xalign(0.5)
+        self._header_bar.set_title_widget(title_label)
+
+        self._new_button = Gtk.Button(label="Novo download")
+        self._new_button.add_css_class("suggested-action")
+        self._new_button.connect("clicked", self._on_new_download_clicked)
+        self._header_bar.pack_end(self._new_button)
+
+        self._menu_button = Gtk.MenuButton()
+        self._menu_button.set_icon_name("open-menu-symbolic")
+        self._menu_button.set_menu_model(self._create_menu())
+        self._header_bar.pack_end(self._menu_button)
+
+        content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        content_box.set_hexpand(True)
+        content_box.set_vexpand(True)
+        self._toolbar_view.set_content(content_box)
+
+        search_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        search_box.set_margin_top(12)
+        search_box.set_margin_start(12)
+        search_box.set_margin_end(12)
+        search_box.set_margin_bottom(6)
+
+        self._search_entry = Gtk.SearchEntry()
+        self._search_entry.set_placeholder_text("Pesquisar download...")
+        self._search_entry.set_hexpand(True)
+        self._search_entry.add_css_class("super-download-search")
+        self._search_entry.connect("activate", self._on_add_url)
+
+        search_box.append(self._search_entry)
+        content_box.append(search_box)
+
+        scroller = Gtk.ScrolledWindow()
+        scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroller.set_hexpand(True)
+        scroller.set_vexpand(True)
+        scroller.set_margin_start(12)
+        scroller.set_margin_end(12)
+        scroller.set_margin_bottom(12)
+
+        self._list_box = Gtk.ListBox()
+        self._list_box.set_selection_mode(Gtk.SelectionMode.NONE)
+        self._list_box.add_css_class("boxed-list")
+        scroller.set_child(self._list_box)
+
+        self._info_label = Gtk.Label(label="Nenhum download no momento.")
+        self._info_label.add_css_class("dim-label")
+        self._info_label.add_css_class("super-download-empty")
+        self._info_label.set_margin_top(48)
+        self._info_label.set_margin_bottom(48)
+        self._info_label.set_margin_start(24)
+        self._info_label.set_margin_end(24)
+        self._info_label.set_xalign(0.5)
+        self._info_label.set_valign(Gtk.Align.CENTER)
+        self._info_label.set_wrap(True)
+
+        self._stack = Gtk.Stack()
+        self._stack.set_hexpand(True)
+        self._stack.set_vexpand(True)
+        self._stack.add_named(scroller, "list")
+        self._stack.add_named(self._info_label, "empty")
+        self._stack.set_visible_child_name("empty")
+
+        content_box.append(self._stack)
+
+    def _create_menu(self) -> Gio.Menu:
+        """Create the hamburger menu mirroring application-wide actions."""
+        menu = Gio.Menu()
+        menu.append("Alternar pausa geral", "app.toggle-pause-all")
+        menu.append("Sair", "app.quit")
+        return menu
 
     def refresh_queue(self) -> None:
         manager: DownloadManager = self.get_application().download_manager  # type: ignore[assignment]
@@ -116,42 +207,49 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _create_row(self, record: DownloadRecord) -> Gtk.ListBoxRow:
         row = Gtk.ListBoxRow()
+        row.set_selectable(False)
+        row.set_activatable(False)
+        row.set_margin_top(4)
+        row.set_margin_bottom(4)
 
-        # Container principal horizontal
         main_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        main_box.set_margin_top(8)
-        main_box.set_margin_bottom(8)
+        main_box.add_css_class("super-download-row")
+        main_box.add_css_class("card")
         main_box.set_margin_start(12)
         main_box.set_margin_end(12)
+        main_box.set_margin_top(8)
+        main_box.set_margin_bottom(8)
+        main_box.set_hexpand(True)
         row.set_child(main_box)
 
-        # Seção de informações (esquerda - expande)
-        info_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        info_box.set_hexpand(True)
+        icon_image = Gtk.Image.new_from_gicon(self._icon_for_record(record))
+        icon_image.set_pixel_size(48)
+        icon_image.set_valign(Gtk.Align.CENTER)
+        main_box.append(icon_image)
 
-        # Nome do arquivo
+        info_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        info_box.set_hexpand(True)
+        main_box.append(info_box)
+
         name_label = Gtk.Label(xalign=0)
         name_label.set_ellipsize(Pango.EllipsizeMode.END)
+        name_label.add_css_class("title-4")
         info_box.append(name_label)
 
-        # Status e velocidade
         status_label = Gtk.Label(xalign=0)
-        status_label.get_style_context().add_class("dim-label")
+        status_label.add_css_class("dim-label")
+        status_label.set_wrap(True)
         info_box.append(status_label)
 
-        # Barra de progresso
         progress = Gtk.ProgressBar()
         progress.set_hexpand(True)
         progress.set_show_text(False)
         info_box.append(progress)
 
-        main_box.append(info_box)
-
-        # Seção de botões (direita - compactos)
-        action_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        action_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         action_box.set_valign(Gtk.Align.CENTER)
+        main_box.append(action_box)
 
-        # Botões com ícones apenas
         pause_button = Gtk.Button(icon_name="media-playback-pause-symbolic")
         pause_button.set_tooltip_text("Pausar")
         pause_button.connect("clicked", self._on_pause_clicked, record.gid)
@@ -171,12 +269,13 @@ class MainWindow(Adw.ApplicationWindow):
         remove_button = Gtk.Button(icon_name="user-trash-symbolic")
         remove_button.set_tooltip_text("Remover da lista")
         remove_button.connect("clicked", self._on_remove_clicked, record.gid)
+        remove_button.add_css_class("destructive-action")
 
         for button in (pause_button, resume_button, cancel_button, open_button, remove_button):
+            button.set_valign(Gtk.Align.CENTER)
             action_box.append(button)
 
-        main_box.append(action_box)
-
+        row.icon_image = icon_image  # type: ignore[attr-defined]
         row.name_label = name_label  # type: ignore[attr-defined]
         row.status_label = status_label  # type: ignore[attr-defined]
         row.progress_bar = progress  # type: ignore[attr-defined]
@@ -187,14 +286,38 @@ class MainWindow(Adw.ApplicationWindow):
         row.remove_button = remove_button  # type: ignore[attr-defined]
         return row
 
+    def _icon_for_record(self, record: DownloadRecord) -> Gio.Icon:
+        """Infer an icon representing the download target."""
+        source = record.destination or record.filename or record.url
+        if source:
+            try:
+                source_str = str(source)
+                content_type, _ = Gio.content_type_guess(source_str, None)
+            except (TypeError, ValueError):
+                content_type = None
+            if content_type:
+                icon = Gio.content_type_get_icon(content_type)
+                if icon is not None:
+                    return icon
+        return Gio.ThemedIcon.new("text-x-generic")
+
     def _update_row_content(self, row: Gtk.ListBoxRow, record: DownloadRecord) -> None:
         row.name_label.set_label(record.filename or record.url)  # type: ignore[attr-defined]
-        status_text = f"{record.status} - {record.progress * 100:.0f}%"
+
+        status_label = row.status_label  # type: ignore[attr-defined]
+        status_parts = [
+            record.status.replace("_", " ").title(),
+            f"{record.progress * 100:.0f}%",
+        ]
         if record.speed:
-            status_text += f" - {record.speed / 1024:.0f} KiB/s"
-        row.status_label.set_label(status_text)  # type: ignore[attr-defined]
-        row.progress_bar.set_fraction(record.progress)  # type: ignore[attr-defined]
-        row.progress_bar.set_text(f"{record.progress * 100:.0f}%")
+            status_parts.append(f"{record.speed / 1024:.0f} KiB/s")
+        status_label.set_label(" | ".join(status_parts))
+
+        row.icon_image.set_from_gicon(self._icon_for_record(record))  # type: ignore[attr-defined]
+
+        progress_bar = row.progress_bar  # type: ignore[attr-defined]
+        progress_bar.set_fraction(record.progress)
+        progress_bar.set_text(f"{record.progress * 100:.0f}%")
 
         # Mostrar/ocultar botões baseado no status
         is_active = record.status in {"active", "waiting", "queued"}
@@ -233,6 +356,71 @@ class MainWindow(Adw.ApplicationWindow):
         app: SuperDownloadApplication = self.get_application()  # type: ignore[assignment]
         GLib.idle_add(app.add_downloads, urls)
 
+    def _on_new_download_clicked(self, _button: Gtk.Button) -> None:
+        if self._new_download_dialog is not None:
+            self._new_download_dialog.present()
+            return
+
+        dialog = Adw.MessageDialog.new(
+            self,
+            "Novo download",
+            "Informe o link do download.",
+        )
+        dialog.add_response("cancel", "Cancelar")
+        dialog.add_response("add", "Adicionar")
+        dialog.set_default_response("add")
+        dialog.set_close_response("cancel")
+        dialog.set_response_appearance("add", Adw.ResponseAppearance.SUGGESTED)
+
+        entry = Gtk.Entry()
+        entry.set_placeholder_text("https://exemplo.com/arquivo.iso")
+        entry.set_hexpand(True)
+        dialog.set_extra_child(entry)
+
+        base_body = dialog.get_body() or ""
+
+        def submit() -> None:
+            url = entry.get_text().strip()
+            if not url or not self._looks_like_url(url):
+                entry.add_css_class("error")
+                dialog.set_body("Forneça um link de download válido.")
+                dialog.emit_stop_by_name("response")
+                return
+
+            entry.remove_css_class("error")
+            dialog.set_body(base_body)
+            app: SuperDownloadApplication = self.get_application()  # type: ignore[assignment]
+            GLib.idle_add(app.add_downloads, [url])
+            self._clear_new_download_dialog()
+            dialog.destroy()
+
+        def on_response(dlg: Adw.MessageDialog, response: str) -> None:
+            if response == "add":
+                submit()
+            else:
+                self._clear_new_download_dialog()
+                dlg.destroy()
+
+        entry.connect("activate", lambda *_: dialog.response("add"))
+        def on_changed(_entry: Gtk.Entry) -> None:
+            if entry.has_css_class("error"):
+                entry.remove_css_class("error")
+            if dialog.get_body() != base_body:
+                dialog.set_body(base_body)
+
+        entry.connect("changed", on_changed)
+        dialog.connect("response", on_response)
+        dialog.connect("destroy", lambda *_: self._clear_new_download_dialog())
+
+        self._new_download_dialog = dialog
+        dialog.present()
+
+        def focus_entry() -> bool:
+            entry.grab_focus()
+            return False
+
+        GLib.idle_add(focus_entry)
+
     def _on_pause_clicked(self, _button: Gtk.Button, gid: str) -> None:
         self.get_application().download_manager.pause(gid)  # type: ignore[attr-defined]
 
@@ -268,6 +456,9 @@ class MainWindow(Adw.ApplicationWindow):
         Gio.AppInfo.launch_default_for_uri(
             GLib.filename_to_uri(folder_path, None), None
         )
+
+    def _clear_new_download_dialog(self) -> None:
+        self._new_download_dialog = None
 
     def _on_quit_response(self, dialog: Adw.MessageDialog, response: str) -> None:
         if response == "quit":
