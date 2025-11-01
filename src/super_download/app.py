@@ -19,7 +19,7 @@ from .tray import TrayIndicator
 from .ui.main_window import MainWindow
 
 
-APP_ID = "com.superdownload"
+APP_ID = "br.com.superdownload"
 
 
 class SuperDownloadApplication(Adw.Application):

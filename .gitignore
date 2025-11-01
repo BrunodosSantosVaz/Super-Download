@@ -85,4 +85,11 @@ test_data/
 .DS_Store
 Thumbs.db
 
-claude.md
+claude.md# Flatpak Build Files
+build-dir/
+flatpak-repo/
+.flatpak-builder/
+*.flatpak
+
+# Temporary files
+setup.py.bak

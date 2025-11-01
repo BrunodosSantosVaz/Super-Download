@@ -1,4 +1,4 @@
-app-id: com.superdownload
+app-id: br.com.superdownload
 runtime: org.gnome.Platform
 runtime-version: "46"
 sdk: org.gnome.Sdk
@@ -14,12 +14,25 @@ finish-args:
   - --talk-name=org.freedesktop.StatusNotifierWatcher
 
 modules:
+  # aria2 - Download utility
+  - name: aria2
+    buildsystem: autotools
+    sources:
+      - type: archive
+        url: https://github.com/aria2/aria2/releases/download/release-1.37.0/aria2-1.37.0.tar.xz
+        sha256: 60a420ad7085eb616cb6e2bdf0a7206d68ff3d37fb5a956dc44242eb2f79b66b
+
+  # Super Download application (includes installing Python dependencies)
   - name: super-download
     buildsystem: simple
+    build-options:
+      build-args:
+        - --share=network
     build-commands:
+      - pip3 install --prefix=/app pyxdg==0.28 aria2p==0.12.1
       - pip3 install --no-deps --prefix=/app .
-      - install -Dm644 data/com.superdownload.desktop /app/share/applications/com.superdownload.desktop
-      - install -Dm644 data/icons/hicolor/512x512/apps/com.superdownload.png /app/share/icons/hicolor/512x512/apps/com.superdownload.png
+      - install -Dm644 data/br.com.superdownload.desktop /app/share/applications/br.com.superdownload.desktop
+      - install -Dm644 data/icons/hicolor/512x512/apps/br.com.superdownload.png /app/share/icons/hicolor/512x512/apps/br.com.superdownload.png
     sources:
       - type: dir
         path: ..

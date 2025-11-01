@@ -181,13 +181,13 @@ class TrayIndicator:
         if property_name == "Category":
             return GLib.Variant("s", "ApplicationStatus")
         elif property_name == "Id":
-            return GLib.Variant("s", "com.superdownload")
+            return GLib.Variant("s", "br.com.superdownload")
         elif property_name == "Title":
             return GLib.Variant("s", "Super Download")
         elif property_name == "Status":
             return GLib.Variant("s", "Active")
         elif property_name == "IconName":
-            return GLib.Variant("s", "com.superdownload")
+            return GLib.Variant("s", "br.com.superdownload")
         elif property_name == "Menu":
             return GLib.Variant("o", "/MenuBar")
 

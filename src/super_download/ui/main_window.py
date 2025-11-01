@@ -67,7 +67,7 @@ class MainWindow(Adw.ApplicationWindow):
         super().__init__(application=app)
         self.set_title("Super Download")
         self.set_default_size(960, 600)
-        self.set_icon_name("com.superdownload")
+        self.set_icon_name("br.com.superdownload")
 
         _ensure_styles_loaded()
         self._download_rows: dict[str, Gtk.ListBoxRow] = {}

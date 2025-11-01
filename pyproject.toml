@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "super-download"
-version = "0.1.0"
+version = "1.0.0"
 description = "Gerenciador centralizado de downloads para Linux usando GTK4 e aria2."
 authors = [{ name = "Equipe Super Download" }]
 readme = "README.md"
