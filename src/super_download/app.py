@@ -49,6 +49,8 @@ class SuperDownloadApplication(Adw.Application):
         logging.debug("Super Download activate request")
         if self._window is None:
             self._window = MainWindow.new(self)
+        # Sempre mostra a janela (mesmo se estava oculta)
+        self._window.set_visible(True)
         self._window.present()
 
     def do_command_line(self, command_line: Gio.ApplicationCommandLine) -> int:  # noqa: N802
@@ -56,9 +58,14 @@ class SuperDownloadApplication(Adw.Application):
         arguments = command_line.get_arguments()[1:]
         urls = [arg for arg in arguments if self._looks_like_url(arg)]
         logging.debug("Received command line with urls=%s", urls)
+
+        # Sempre ativa a janela (seja com ou sem URLs)
+        self.activate()
+
+        # Se há URLs, enfileira para download
         if urls:
-            self.activate()
             GLib.idle_add(self._enqueue_from_cli, urls)
+
         return 0
 
     # ------------------------------------------------------------------
@@ -83,8 +90,12 @@ class SuperDownloadApplication(Adw.Application):
         if self.download_manager.can_quit():
             self.quit()
         else:
-            if self._window:
-                self._window.ask_quit_confirmation()
+            # Precisa mostrar confirmação - garantir que a janela existe e está visível
+            if self._window is None:
+                self._window = MainWindow.new(self)
+            self._window.set_visible(True)
+            self._window.present()
+            self._window.ask_quit_confirmation()
 
     def _on_toggle_pause_all(
         self, _action: Gio.SimpleAction, _param: Gio.Variant | None

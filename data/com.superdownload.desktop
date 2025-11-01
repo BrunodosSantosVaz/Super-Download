@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Super Download
+Comment=Gerenciador centralizado de downloads para Linux
+Icon=com.superdownload
+Exec=super-download %U
+Terminal=false
+Categories=Network;FileTransfer;GTK;
+MimeType=x-scheme-handler/http;x-scheme-handler/https;x-scheme-handler/ftp;
+Keywords=download;aria2;gerenciador;
+StartupNotify=true

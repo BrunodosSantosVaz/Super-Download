@@ -7,14 +7,19 @@ command: super-download
 finish-args:
   - --socket=session-bus
   - --socket=wayland
+  - --socket=fallback-x11
   - --share=network
   - --filesystem=home
+  - --talk-name=org.kde.StatusNotifierWatcher
+  - --talk-name=org.freedesktop.StatusNotifierWatcher
 
 modules:
   - name: super-download
     buildsystem: simple
     build-commands:
       - pip3 install --no-deps --prefix=/app .
+      - install -Dm644 data/com.superdownload.desktop /app/share/applications/com.superdownload.desktop
+      - install -Dm644 data/icons/hicolor/512x512/apps/com.superdownload.png /app/share/icons/hicolor/512x512/apps/com.superdownload.png
     sources:
       - type: dir
         path: ..

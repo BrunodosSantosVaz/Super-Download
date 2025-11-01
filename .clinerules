@@ -1,0 +1,158 @@
+# Super Download - Project Memory
+
+## Origem do Projeto
+
+Durante o desenvolvimento do **Super Web App** (`/home/brunovaz/projetos/Super-Web-App/`), surgiu a necessidade de um gerenciador de downloads. Ao invés de implementar essa funcionalidade apenas para o Super Web App, percebi que um gerenciador de downloads poderia ser útil como um **sistema independente e reutilizável**, capaz de atender não apenas o Super Web App, mas outras aplicações e casos de uso também.
+
+Assim nasceu o **Super Download**: um gerenciador de downloads centralizado, moderno e nativo para Linux, que pode ser integrado a outros projetos ou usado de forma standalone.
+
+## Arquitetura do Projeto
+
+### Estrutura de Diretórios
+```
+Super-Download/
+├── src/super_download/
+│   ├── __init__.py
+│   ├── main.py              # Ponto de entrada
+│   ├── app.py               # Aplicação GTK4/Adwaita principal
+│   ├── aria2_client.py      # Cliente para comunicação com aria2c
+│   ├── download_manager.py  # Gerenciador de downloads
+│   ├── persistence.py       # Persistência de dados
+│   ├── models.py            # Modelos de dados
+│   ├── tray.py              # Integração com bandeja do sistema
+│   ├── cli.py               # Interface de linha de comando
+│   └── ui/
+│       ├── __init__.py
+│       └── main_window.py   # Janela principal GTK4
+├── data/
+│   ├── com.superdownload.desktop
+│   └── icons/
+├── flatpak/
+│   └── com.superdownload.yml
+└── tests/
+```
+
+### Componentes Principais
+
+#### 1. SuperDownloadApplication (app.py)
+- Classe principal herdando de `Adw.Application`
+- Gerencia ciclo de vida do aplicativo
+- Suporta IPC (single instance) via `Gio.ApplicationFlags`
+- Integra bandeja do sistema, gerenciador de downloads e persistência
+
+#### 2. MainWindow (ui/main_window.py)
+- Interface GTK4/Adwaita
+- Lista de downloads com progresso em tempo real
+- Botões de ação: pausar, retomar, cancelar, abrir pasta, remover
+- Handler `close-request` para minimizar para bandeja ao invés de fechar
+
+#### 3. DownloadManager (download_manager.py)
+- Orquestra downloads via aria2c
+- Polling a cada 1 segundo para atualizar status
+- Persistência automática de mudanças
+- Sistema de observers para atualizar UI
+
+#### 4. Aria2Client (aria2_client.py)
+- Wrapper sobre aria2p
+- Comunicação JSON-RPC com daemon aria2c (porta 6800)
+- Gerenciamento de nomes únicos para arquivos duplicados
+- Fallback para modo mock quando aria2p indisponível
+
+#### 5. TrayIndicator (tray.py)
+- **Integração via StatusNotifierItem (DBus)**
+- Protocolo nativo do FreeDesktop.org (sem dependências externas)
+- Comunicação direta via DBus (Gio.DBusConnection)
+- Menu via DBusMenu (protocolo Canonical)
+- Menu contextual simplificado: **Abrir** e **Sair**
+- Funciona nativamente em KDE Plasma, XFCE, Cinnamon, MATE
+- GNOME Shell requer extensão "AppIndicator Support"
+- **Status: Totalmente funcional** ✅
+
+#### 6. PersistenceStore (persistence.py)
+- Salva downloads e configurações em `~/.local/state/superdownload/`
+- Formato JSON para histórico de downloads
+- Configurações de tema e diretório padrão
+
+### Comportamento da Bandeja do Sistema
+
+**Requisitos implementados:**
+- ✅ Sempre apenas UM ícone na bandeja
+- ✅ Fechar janela (X) → minimiza para bandeja (não sai)
+- ✅ Menu "Abrir" → abre e dá foco na janela
+- ✅ Menu "Sair" → verifica downloads ativos e pede confirmação antes de encerrar
+- ✅ Confirmação mostra se há downloads em progresso (active/waiting/queued)
+
+**Implementação atual:**
+- GTK4 (Adwaita) para janela principal
+- StatusNotifierItem via DBus para bandeja (protocolo nativo)
+- DBusMenu com 2 opções: "Abrir" e "Sair" (separadas por divisor)
+- Nenhuma dependência GTK3
+- Eventos do menu funcionam via `GLib.idle_add` para execução thread-safe
+
+**Status:** ✅ **Totalmente funcional** em KDE Plasma, XFCE, Cinnamon, MATE. GNOME requer extensão.
+
+### Dependências
+
+**Runtime:**
+- Python 3.12+
+- GTK4
+- libadwaita
+- aria2c (daemon)
+- aria2p (biblioteca Python)
+- PyGObject (para DBus e GTK)
+
+**Flatpak:**
+- Runtime: org.gnome.Platform 46
+- Permissões DBus: org.kde.StatusNotifierWatcher, org.freedesktop.StatusNotifierWatcher
+- Sem dependências externas (usa DBus nativo)
+
+### Comandos Úteis
+
+```bash
+# Executar aplicativo
+python -m super_download.main
+
+# Com debug
+python -m super_download.main --debug
+
+# Adicionar downloads via CLI
+python -m super_download.main "URL1" "URL2"
+
+# Iniciar daemon aria2c
+aria2c --enable-rpc --rpc-listen-all=false --rpc-listen-port=6800 --daemon=true
+```
+
+### Logs
+
+Localização: `~/.local/state/superdownload/log.txt`
+Nível: DEBUG (com --debug) ou INFO (padrão)
+
+### Issues Conhecidos
+
+1. **Bandeja no GNOME Shell:**
+   - Requer extensão "AppIndicator and KStatusNotifierItem Support"
+   - Link: https://extensions.gnome.org/extension/615/appindicator-support/
+   - Em outros DEs (KDE, XFCE, Cinnamon, MATE), funciona nativamente
+
+2. **Downloads antigos com GID inválido:**
+   - Erros "GID not found" são normais quando aria2c reinicia
+   - Downloads antigos devem ser limpos da persistência
+
+### Convenções de Código
+
+- Type hints em todos os métodos públicos
+- Docstrings em classes e métodos complexos
+- Logging via módulo logging padrão
+- Sem emojis no código (exceto em commits Git se solicitado)
+- Preferir edição de arquivos existentes ao invés de criar novos
+
+### Próximos Passos
+
+- [x] Implementar bandeja via StatusNotifierItem (DBus nativo)
+- [x] Menu da bandeja funcional com "Abrir" e "Sair"
+- [x] Confirmação ao sair com downloads ativos
+- [x] Documentar instalação da extensão GNOME no README
+- [ ] Adicionar atualização dinâmica de título/tooltip na bandeja
+- [ ] Limpar downloads antigos/inválidos automaticamente
+- [ ] Adicionar testes automatizados
+- [ ] Integração com Super Web App

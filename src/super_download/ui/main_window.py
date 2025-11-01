@@ -27,8 +27,12 @@ class MainWindow(Adw.ApplicationWindow):
         super().__init__(application=app)
         self.set_title("Super Download")
         self.set_default_size(960, 600)
+        self.set_icon_name("com.superdownload")
 
         self._download_rows: dict[str, Gtk.ListBoxRow] = {}
+
+        # Conectar handler para interceptar o fechamento da janela
+        self.connect("close-request", self._on_close_request)
 
         self._toolbar_view = Adw.ToolbarView()
         self.set_content(self._toolbar_view)
@@ -267,8 +271,26 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _on_quit_response(self, dialog: Adw.MessageDialog, response: str) -> None:
         if response == "quit":
-            self.get_application().quit()  # type: ignore[attr-defined]
+            app: SuperDownloadApplication = self.get_application()  # type: ignore[assignment]
+            # Pausar todos os downloads antes de encerrar
+            app.download_manager.pause_all()
+            # Encerrar aplicativo
+            app.quit()
         dialog.destroy()
+
+    def _on_close_request(self, _window: Gtk.Window) -> bool:
+        """Intercepta o fechamento da janela.
+
+        Se a bandeja estiver disponível, apenas oculta a janela.
+        Retorna True para prevenir o fechamento padrão.
+        """
+        app: SuperDownloadApplication = self.get_application()  # type: ignore[assignment]
+        if app.tray and app.tray.available:
+            # Se a bandeja está disponível, apenas oculta a janela
+            self.set_visible(False)
+            return True  # Previne o fechamento padrão
+        # Se não há bandeja, permite o fechamento normal (que acionará quit)
+        return False
 
     @staticmethod
     def _looks_like_url(candidate: str) -> bool:

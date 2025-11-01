@@ -30,6 +30,12 @@ super-download-cli = "super_download.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"*" = ["data/**/*"]
+
+[tool.setuptools]
+include-package-data = true
+
 [tool.black]
 target-version = ["py311"]
 line-length = 88
